@@ -73,10 +73,13 @@ def to_twoscomplement(bits, value):
     return formatstring.format(value)
 
 def isBinary(num):
-    for i in str(int(num)):
-        if i in ("0","1") == False:
-            return False
-    return True
+    for number in str(int(num)):
+        return number in ["0", "1"]
+
+    # for i in str(int(num)):
+    #     if i in ("0","1") == False:
+    #         return False
+    # return True
 
 def is_digit(n):
     try:
@@ -100,11 +103,8 @@ def encode(instruction):
         opcode = opcodes[command[0]]
         if is_digit(command[2]):
             src = val_code[command[0]]
-            value = ""
-            if command[2].startswith('-'):
-                value = to_twoscomplement(8, int(command[2]))
-            else:
-                value = command[2]
+            #value = ""
+            value = to_twoscomplement(8, int(command[2]))
 
             hexval_str = ""
             if isBinary(value):
