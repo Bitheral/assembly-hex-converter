@@ -1,3 +1,5 @@
+import re
+
 opcodes = {
     "ADD": "00",
     "MOVE": "01",
@@ -62,24 +64,13 @@ bin_hex = {
     "1111": "F",
 }
 
-# def splitAt(w, n):
-#     for i in range(0, len(w), n):
-#         yield w[i:i + n]
 
 def to_twoscomplement(bits, value):
     if value < 0:
-        value = ( 1<<bits ) + value
+        value = (1 << bits) + value
     formatstring = '{:0%ib}' % bits
     return formatstring.format(value)
 
-def isBinary(num):
-    for number in str(int(num)):
-        return number in ["0", "1"]
-
-    # for i in str(int(num)):
-    #     if i in ("0","1") == False:
-    #         return False
-    # return True
 
 def is_digit(n):
     try:
@@ -90,142 +81,161 @@ def is_digit(n):
 
 
 def encode(instruction):
-    command = instruction.replace(",", "").split(" ")
-    opcode = ""
-    dest = ""
-    src = ""
-    ext = ""
-    output = ""
-
-    if len(command) < 3:
-        opcode = "10"
+    if not instruction.startswith(tuple(list(opcodes.keys()))):
+        print(f"Invalid keyword: {instruction.split(' ')[0]}")
     else:
-        opcode = opcodes[command[0]]
-        if is_digit(command[2]):
-            src = val_code[command[0]]
-            #value = ""
-            value = to_twoscomplement(8, int(command[2]))
+        # Seperate the instruction into sections where there is a space.
+        command = instruction.replace(",", "").split(" ")
+        ext = ""
 
-            hexval_str = ""
-            if isBinary(value):
-                hexval_split = [value[i:i + 4] for i in range(0, len(value), 4)]
-                hexval_str = (''.join(hex(int(a, 2))[2:] for a in hexval_split)).upper()
-            else:
-                ext_temp = [value[i:i + 2] for i in range(0, len(value), 2)]
-                ext_temp.reverse()
-            ext = hexval_str if isBinary(value) else ''.join(ext_temp)
+        output = ""
+
+        # If the command length is less then 3 (Has no source registry or value) then default to 10 for opcode
+        if len(command) < 3:
+            opcode_bin = "10"
         else:
-            for index, char in enumerate(command[2]):
-                src += alpha_bin[char]
+            # Get the binary opcode of the command from the opcodes dictionary
+            opcode_bin = opcodes[command[0]]
 
-    if command[1].isnumeric():
-        dest = val_code[command[0]]
-        ext_temp = [command[1][i:i + 2] for i in range(0, len(command[1]), 2)]
-        ext_temp.reverse()
-        ext = ''.join(ext_temp)
-    else:
-        for index, char in enumerate(command[1]):
-            dest += alpha_bin[char]
+            # Checks if destination is a value or a registry
+            if is_digit(str(command[1])):
+                # The destination has digits, therefor will require an extension
+                dest_bin = val_code[command[0]]
+                ext = command[1]
+            else:
+                # An address has been detected, will format the address to hex
+                dest_bin = alpha_bin[command[1]]
 
-    hexcode = (opcode + dest + src)
-    hexcode_split = [hexcode[i:i + 4] for i in range(0, len(hexcode), 4)]
+            # Checks if source section is a value or a registry
+            if is_digit(str(command[2])):
+                # The destination has digits, therefor will require an extension
+                src_bin = val_code[command[0]]
+                # Checks if the digits is a negative
+                if int(command[2]) < 0:
+                    # Will perform a format into hexadecimal for the extension
+                    ext_bin = to_twoscomplement(8, int(command[2]))
+                    ext_bin_split = [ext_bin[i:i + 4] for i in range(0, len(ext_bin), 4)]
+                    ext = (''.join(hex(int(a, 2))[2:] for a in ext_bin_split)).upper()
+                else:
+                    # Will use the number provided for the extension
+                    ext = command[2]
 
-    hexcode_str = (''.join(hex(int(a, 2))[2:] for a in hexcode_split)).upper()
+            else:
+                # An address has been detected, will format the address to hex
+                src_bin = alpha_bin[command[2]]
 
-    output = hexcode_str + ext  # hexcode_split + ext
+            # Combine all binary numbers into one string
+            output_bin = f"{opcode_bin}{dest_bin}{src_bin}"
 
-    print(output)
+            # Split the output into 2 4-bit binary numbers
+            output_bin_split = [output_bin[i:i + 4] for i in range(0, len(output_bin), 4)]
+
+            # Convert each 4 bit binary number into a hexadecimal
+            output_hex = (''.join(hex(int(a, 2))[2:] for a in output_bin_split)).upper()
+
+            # Split the address into 2 sections and reverse it
+            ext_split = [ext[i:i + 2] for i in range(0, len(ext), 2)]
+            ext_split.reverse()
+
+            # Combine the output hexadecimal value and extension
+            output = output_hex + ''.join(ext_split)
+
+        return output
 
 
 def decode(instruction):
-    import struct
     import bitstring
-    command_hex = [instruction[:2], instruction[2:4]]
-
-    command = ["", ""]
+    output = ""
 
     bin_str = ""
-    for char in command_hex[0]:
+    for char in instruction:
         bin_str += hex_bin[char]
 
-    if bin_str[2:5] in list(val_code.values()):
-        if opcodes[list(val_code.keys())[list(val_code.values()).index(bin_str[2:5])]] == bin_str[:2]:
-            command[0] = list(val_code.keys())[list(val_code.values()).index(bin_str[2:5])]
-            command[1] = list(alpha_bin.keys())[list(alpha_bin.values()).index(bin_str[5:])]
-            ext = [instruction[i:i + 2] for i in range(2, len(instruction), 2)]
-            ext.reverse()
-            command.append(''.join(ext))
-    else:
-        command[0] = list(opcodes.keys())[list(opcodes.values()).index(bin_str[:2])]
-        if bin_str[2:5] not in list(alpha_bin.values()):
-            command[1] = list(alpha_bin.keys())[list(alpha_bin.values()).index(bin_str[5:])]
+    base_instruction = bin_str[:8]
+    ext = bin_str[8:]
+
+    opcode_ins = base_instruction[:2]
+    dest_ins = base_instruction[2:5]
+    src_ins = base_instruction[5:8]
+
+    if ext:
+        if len(ext) != 8:
+            ext_bin_4 = [ext[i:i + 4] for i in range(0, len(ext), 4)]
+            ext_bin_1 = []
+            for bin_val in ext_bin_4:
+                ext_bin_1.append(str(int(bin_val, 2)))
+
+            ext_int_dual = [ext_bin_1[0] + ext_bin_1[1], ext_bin_1[2] + ext_bin_1[3]]
+            ext_int_dual.reverse()
         else:
-            command[1] = list(alpha_bin.keys())[list(alpha_bin.values()).index(bin_str[2:5])]
-            value_bin = ""
-            for char in instruction[-2:]:
-                value_bin += hex_bin[char]
+            if ext:
+                ext_int_dual = str(bitstring.BitArray(bin=str(ext)).int)
+    else:
+        ext_int_dual = list(alpha_bin.keys())[list(alpha_bin.values()).index(src_ins)]
 
-            command.append(str(bitstring.BitArray(bin=value_bin).int))
+    if dest_ins in list(alpha_bin.values()):
+        # Can perform LOAD, ADD or MOVE
+        if src_ins == "110":
+            # Perform LOAD
+            output = f"LOAD {list(alpha_bin.keys())[list(alpha_bin.values()).index(dest_ins)]}, {''.join(ext_int_dual)}"
+            pass
+        else:
+            if opcode_ins == "00":
+                # Perform ADD
+                output = f"ADD {list(alpha_bin.keys())[list(alpha_bin.values()).index(dest_ins)]}, {''.join(ext_int_dual)}"
+            else:
+                # Perform MOVE
+                output = f"MOVE {list(alpha_bin.keys())[list(alpha_bin.values()).index(dest_ins)]}, {''.join(ext_int_dual)}"
+    else:
+        # Can Perform STORE and JMPs
+        if opcode_ins == "01":
+            output = f"STORE {''.join(ext_int_dual)}, {list(alpha_bin.keys())[list(alpha_bin.values()).index(src_ins)]}"
+        else:
+            # Perform JMPS
+            pass
+        pass
 
-    command_word = command[0]
-    command_src = command[1]
-    command_req = command_word + " " + command_src
-
-    command_str = command_req if len(instruction) < 3 else command_req + ", " + command[2]
-    print(command_str)
-
+    return output
 
 
 def main():
+    import os
     print("1. Decode")
     print("2. Encode")
     option = int(input("Pick an option: "))
 
-    optionState = option - 1
-    if optionState:
+    option_state = option - 1
+    if option_state:
         print("Enter an instruction to be decoded from hexadecimal into assembly (e.g. MOVE D, -5)")
+        print("Or enter a filename in the current directory (e.g. encode_me.txt)")
         instruction_str = str(input())
-        encode(instruction_str)
+        if os.path.isfile(instruction_str):
+            with open(instruction_str, "r") as file:
+                for line in file:
+                    encoded_line = encode(line.strip())
+                    if encoded_line is not None:
+                        print(f"[{line.strip()}] -> {encoded_line}")
+            file.close()
+        else:
+            encoded_line = encode(instruction_str.strip())
+            if encoded_line is not None:
+                print(f"[{instruction_str.strip()}] -> {encoded_line}")
     else:
         print("Enter an instruction to be encoded from hexadecimal into assembly (e.g. 5DFB)")
+        print("Or enter a filename in the current directory (e.g. decode_me.txt)")
         instruction_str = str(input())
-        decode(instruction_str)
+        if os.path.isfile(instruction_str):
+            with open(instruction_str, "r") as file:
+                for line in file:
+                    decoded_line = decode(line.strip())
+                    if decoded_line is not None:
+                        print(f"[{line.strip()}] -> {decoded_line}")
+            file.close()
+        else:
+            decoded_line = decode(instruction_str.strip())
+            if decoded_line is not None:
+                print(f"[{instruction_str.strip()}] -> {decoded_line}")
 
 
-main()
-
-# a map for the other way
-
-
-def hexToBin(hexString):
-    # can validate the string here if needed
-
-    # start with an empty output
-    binaryString = ""
-
-    # loop through mapping each digit to the dictionary and retrieving the associated binary
-    marker = 0
-
-    while marker < len(hexString):
-        # add the next four digits onto the string
-        binaryString += hexToBinDictionary.get(hexString[marker])
-        # move the marker so we are looking at the next digit
-        marker += 1
-
-    return binaryString
-
-
-def binToHex(binaryString):
-    # make sure the string has blocks of 4 bits
-    while len(binaryString)%4 != 0:
-        binaryString = "0"+binaryString
-
-    # now go through the string and convert each 4 blocks to a Hex digit using the dictionary defined at the start of this file.
-    marker = 0
-    returnString = ""
-    while marker < len(binaryString):
-        returnString += binToHexDictionary.get(binaryString[marker:marker+4])
-        marker += 4
-
-    return returnString
-
+if __name__ == "__main__":
+    main()
