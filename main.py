@@ -1,14 +1,12 @@
-import re
-
 opcodes = {
     "ADD": "00",
     "MOVE": "01",
     "STORE": "01",
     "LOAD": "01",
-    "JMP": "10",
-    "JPZ": "10",
-    "JPP": "10",
-    "JPN": "10"
+    "JMP": "10000000",
+    "JPZ": "10000001",
+    "JPP": "10000010",
+    "JPN": "10000011"
 }
 
 val_code = {
@@ -65,6 +63,8 @@ bin_hex = {
 }
 
 
+# Convert number to binary with two's compliment
+# https://stackoverflow.com/questions/21871829/twos-complement-of-numbers-in-python
 def to_twoscomplement(bits, value):
     if value < 0:
         value = (1 << bits) + value
@@ -84,15 +84,37 @@ def encode(instruction):
     if not instruction.startswith(tuple(list(opcodes.keys()))):
         print(f"Invalid keyword: {instruction.split(' ')[0]}")
     else:
-        # Seperate the instruction into sections where there is a space.
+        # Separate the instruction into sections where there is a space.
         command = instruction.replace(",", "").split(" ")
         ext = ""
 
         output = ""
 
         # If the command length is less then 3 (Has no source registry or value) then default to 10 for opcode
-        if len(command) < 3:
-            opcode_bin = "10"
+        if len(command) <= 1:
+            print(f"Invalid format. At least 1 argument is required.")
+            return
+        elif len(command) < 3:
+            opcode_bin = opcodes[command[0]]
+            if is_digit(command[1]):
+                ext = command[1]
+            else:
+                print(f"Invalid argument: {instruction.split(' ')[1]}")
+                return
+
+            # Split the opcode into 2 4-bit binary digits
+            output_bin_split = [opcode_bin[i:i + 4] for i in range(0, len(opcode_bin), 4)]
+
+            # Convert each 4 bit binary digits into a hexadecimal
+            output_hex = (''.join(hex(int(a, 2))[2:] for a in output_bin_split)).upper()
+
+            # Split the address into 2 sections and reverse it
+            ext_split = [ext[i:i + 2] for i in range(0, len(ext), 2)]
+            ext_split.reverse()
+
+            # Combine the output hexadecimal value and extension
+            output = output_hex + ''.join(ext_split)
+
         else:
             # Get the binary opcode of the command from the opcodes dictionary
             opcode_bin = opcodes[command[0]]
@@ -144,83 +166,80 @@ def encode(instruction):
 
 
 def decode(instruction):
-    import bitstring
-    output = ""
-
-    bin_str = ""
-    for char in instruction:
-        bin_str += hex_bin[char]
-
-    base_instruction = bin_str[:8]
-    ext = bin_str[8:]
-
-    opcode_ins = base_instruction[:2]
-    dest_ins = base_instruction[2:5]
-    src_ins = base_instruction[5:8]
-
-    if ext:
-        if len(ext) != 8:
-            ext_bin_4 = [ext[i:i + 4] for i in range(0, len(ext), 4)]
-            ext_bin_1 = []
-            for bin_val in ext_bin_4:
-                ext_bin_1.append(str(int(bin_val, 2)))
-
-            ext_int_dual = [ext_bin_1[0] + ext_bin_1[1], ext_bin_1[2] + ext_bin_1[3]]
-            ext_int_dual.reverse()
-        else:
-            if ext:
-                ext_int_dual = str(bitstring.BitArray(bin=str(ext)).int)
+    # Validates the instruction
+    if not instruction[0].isdigit():
+        print(f"Invalid format. Instruction must start with a number")
     else:
-        ext_int_dual = list(alpha_bin.keys())[list(alpha_bin.values()).index(src_ins)]
+        import bitstring
 
-    if dest_ins in list(alpha_bin.values()):
-        # Can perform LOAD, ADD or MOVE
-        if src_ins == "110":
-            # Perform LOAD
-            output = f"LOAD {list(alpha_bin.keys())[list(alpha_bin.values()).index(dest_ins)]}, {''.join(ext_int_dual)}"
-            pass
-        else:
-            if opcode_ins == "00":
-                # Perform ADD
-                output = f"ADD {list(alpha_bin.keys())[list(alpha_bin.values()).index(dest_ins)]}, {''.join(ext_int_dual)}"
+        # Converts each character from the hexadecimal string into binary
+        bin_str = ""
+        for char in instruction:
+            bin_str += hex_bin[char]
+
+        # Splits the binary string into instruction and extension
+        base_instruction = bin_str[:8]
+        ext = bin_str[8:]
+
+        # Splits the binary instruction into the opcode, destination and source sections
+        opcode_ins = base_instruction[:2]
+        dest_ins = base_instruction[2:5]
+        src_ins = base_instruction[5:8]
+
+        # Checks if there is an extension
+        if ext:
+            # Converts binary into positive digits and swaps the values
+            if len(ext) != 8:
+                ext_bin_4 = [ext[i:i + 4] for i in range(0, len(ext), 4)]
+                ext_bin_1 = []
+                for bin_val in ext_bin_4:
+                    ext_bin_1.append(str(int(bin_val, 2)))
+
+                ext_int_dual = [ext_bin_1[0] + ext_bin_1[1], ext_bin_1[2] + ext_bin_1[3]]
+                ext_int_dual.reverse()
             else:
-                # Perform MOVE
-                output = f"MOVE {list(alpha_bin.keys())[list(alpha_bin.values()).index(dest_ins)]}, {''.join(ext_int_dual)}"
-    else:
-        # Can Perform STORE and JMPs
-        if opcode_ins == "01":
-            output = f"STORE {''.join(ext_int_dual)}, {list(alpha_bin.keys())[list(alpha_bin.values()).index(src_ins)]}"
+                # Converts binary into negative digits and swaps the values
+                ext_int_dual = str(bitstring.BitArray(bin=str(ext)).int)
         else:
-            # Perform JMPS
-            pass
-        pass
+            # Converts binary hexadecimal
+            ext_int_dual = list(alpha_bin.keys())[list(alpha_bin.values()).index(src_ins)]
 
-    return output
+        if base_instruction in list(opcodes.values()):
+            # Perform JMPs
+            output = f"{list(opcodes.keys())[list(opcodes.values()).index(base_instruction)]} {''.join(ext_int_dual)}"
+        else:
+            # Performs other commands
+            if dest_ins in list(alpha_bin.values()):
+                # Can perform LOAD, ADD or MOVE
+                if src_ins == "110":
+                    # Perform LOAD
+                    output = f"LOAD {list(alpha_bin.keys())[list(alpha_bin.values()).index(dest_ins)]}, {''.join(ext_int_dual)}"
+                    pass
+                else:
+                    if opcode_ins == "00":
+                        # Perform ADD
+                        output = f"ADD {list(alpha_bin.keys())[list(alpha_bin.values()).index(dest_ins)]}, {''.join(ext_int_dual)}"
+                    else:
+                        # Perform MOVE
+                        output = f"MOVE {list(alpha_bin.keys())[list(alpha_bin.values()).index(dest_ins)]}, {''.join(ext_int_dual)}"
+            else:
+                # Can Perform STORE
+                output = f"STORE {''.join(ext_int_dual)}, {list(alpha_bin.keys())[list(alpha_bin.values()).index(src_ins)]}"
+
+        return output
 
 
 def main():
     import os
-    print("1. Decode")
-    print("2. Encode")
-    option = int(input("Pick an option: "))
+    option = -1
 
-    option_state = option - 1
-    if option_state:
-        print("Enter an instruction to be decoded from hexadecimal into assembly (e.g. MOVE D, -5)")
-        print("Or enter a filename in the current directory (e.g. encode_me.txt)")
-        instruction_str = str(input())
-        if os.path.isfile(instruction_str):
-            with open(instruction_str, "r") as file:
-                for line in file:
-                    encoded_line = encode(line.strip())
-                    if encoded_line is not None:
-                        print(f"[{line.strip()}] -> {encoded_line}")
-            file.close()
-        else:
-            encoded_line = encode(instruction_str.strip())
-            if encoded_line is not None:
-                print(f"[{instruction_str.strip()}] -> {encoded_line}")
-    else:
+    while option <= 0 or option >= 3:
+        print("1. Encode")
+        print("2. Decode")
+        option = int(input("Pick an option: "))
+        print()
+
+    if option == 2:
         print("Enter an instruction to be encoded from hexadecimal into assembly (e.g. 5DFB)")
         print("Or enter a filename in the current directory (e.g. decode_me.txt)")
         instruction_str = str(input())
@@ -235,6 +254,21 @@ def main():
             decoded_line = decode(instruction_str.strip())
             if decoded_line is not None:
                 print(f"[{instruction_str.strip()}] -> {decoded_line}")
+    else:
+        print("Enter an instruction to be encoded from assembly into hexadecimal (e.g. MOVE D, -5)")
+        print("Or enter a filename in the current directory (e.g. encode_me.txt)")
+        instruction_str = str(input())
+        if os.path.isfile(instruction_str):
+            with open(instruction_str, "r") as file:
+                for line in file:
+                    encoded_line = encode(line.strip())
+                    if encoded_line is not None:
+                        print(f"[{line.strip()}] -> {encoded_line}")
+            file.close()
+        else:
+            encoded_line = encode(instruction_str.strip())
+            if encoded_line is not None:
+                print(f"[{instruction_str.strip()}] -> {encoded_line}")
 
 
 if __name__ == "__main__":
