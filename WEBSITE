@@ -1,5 +1,8 @@
 {
   "body":"**Assembly & Hexidecimal converter** is a simple program to convert Assembly code into Hexadecimal, and as well as converting from Hexadecimal to Assembly code",
   "name":"Assembly &\n Hexidecimal converter",
-  "order":5
+  "order":5,
+  "tags": [
+    "University"
+  ]
 }
