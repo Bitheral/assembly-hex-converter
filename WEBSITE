@@ -1,5 +1,5 @@
 {
-  "body":"**Assembly Hex converter** is a simple program to convert Assembly code into Hexadecimal, and as well as converting from Hexadecimal to Assembly code",
-  "name":"Assembly Hex converter",
+  "body":"**Assembly & Hexidecimal converter** is a simple program to convert Assembly code into Hexadecimal, and as well as converting from Hexadecimal to Assembly code",
+  "name":"Assembly & Hexidecimal converter",
   "order":5
 }
